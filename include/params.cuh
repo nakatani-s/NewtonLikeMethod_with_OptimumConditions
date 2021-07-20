@@ -7,6 +7,7 @@ params.cuh
 #define PARAMS_CUH
 
 #define InputSaturation
+#define WRITE_MATRIX_INFORMATION
 
 #define SIM_TIME 1500
 #define ITERATIONS_MAX 6000

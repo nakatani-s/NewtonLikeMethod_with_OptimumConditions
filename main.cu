@@ -21,6 +21,7 @@
 #include "include/MCMPC.cuh"
 #include "include/NewtonLikeMethod.cuh"
 #include "include/optimum_conditions.cuh"
+#include "include/dataToFile.cuh"
 // #include "include/cudaErrorCheck.cuh"
 
 #define CHECK(call)                                                  \
@@ -112,6 +113,15 @@ int main(int argc, char **argv)
     dim3 grid((numUnknownParamQHP + block.x - 1)/ block.x, (numUnknownParamQHP + block.y -1) / block.y);
     printf("#NumBlocks = %d\n", numBlocks);
     printf("#NumBlocks = %d\n", numUnknownParamQHP);
+
+#ifdef WRITE_MATRIX_INFORMATION
+    float *WriteHessian, *WriteRegular;
+    WriteHessian = (float *)malloc(sizeof(float)*dimHessian);
+    WriteRegular = (float *)malloc(sizeof(float)*NUM_OF_PARABOLOID_COEFFICIENT);
+    int timerParam[5] = { };
+    dataName *name;
+    name = (dataName*)malloc(sizeof(dataName)*2);
+#endif
 
     /* MCMPC用の乱数生成用のseedを生成する */
     curandState *deviceRandomSeed;
@@ -250,6 +260,19 @@ int main(int argc, char **argv)
                 // NewtonLikeMethodGenNormalizationMatrix<<<grid, block>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
                 NewtonLikeMethodGenNormalEquation<<<grid, block>>>(Gmatrix, CVector, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
                 cudaDeviceSynchronize();
+#ifdef WRITE_MATRIX_INFORMATION
+                if(t<300){
+                    if(t % 100 == 0){
+                        get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
+                        sprintf(name[0].name, "RegularMatrix");
+                        name[0].dimSize = NUM_OF_PARABOLOID_COEFFICIENT;
+                        CHECK(cudaMemcpy(WriteRegular, Gmatrix, sizeof(float) * NUM_OF_PARABOLOID_COEFFICIENT, cudaMemcpyDeviceToHost));
+                        write_Matrix_Information(WriteRegular, &name[0], timerParam);
+                    }
+                }else{
+
+                }
+#endif
                 //以下は、正規方程式（最小二乗法で使用）のベクトル(正規方程式：Gx = v の v)の各要素を計算する関数
                 // NewtonLikeMethodGenNormalizationVector<<<NUM_OF_PARABOLOID_COEFFICIENT, 1>>>(CVector, deviceQHP, paramsSizeQuadHyperPlane);
                 // cudaDeviceSynchronize();

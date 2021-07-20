@@ -56,7 +56,7 @@ OBJS = \
 $(OBJ_DIR)/main.o $(OBJ_DIR)/MCMPC.o \
 $(OBJ_DIR)/dynamics.o $(OBJ_DIR)/init.o \
 $(OBJ_DIR)/optimum_conditions.o $(OBJ_DIR)/Matrix.o \
-$(OBJ_DIR)/NewtonLikeMethod.o
+$(OBJ_DIR)/NewtonLikeMethod.o $(OBJ_DIR)/dataToFile.o
 ##########################################################
 
 ## Compile ##

@@ -14,4 +14,4 @@
 float calc_cost_Cart_and_SinglePole(float *U, SystemControlVariable SCV);
 float calc_tolerance_Cart_and_SinglePole(float *U, SystemControlVariable SCV);
 
-void calc_OC_for_Cart_and_SinglePole_hostF(float *Ans, float *U, SystemControlVariable SCV);
+void calc_OC_for_Cart_and_SinglePole_hostF(float *Ans, float *U, SystemControlVariable *SCV, Tolerance *Tol);

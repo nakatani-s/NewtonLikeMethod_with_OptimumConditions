@@ -8,10 +8,10 @@ params.cuh
 
 #define InputSaturation
 
-#define SIM_TIME 1000
-#define ITERATIONS_MAX 1000
-#define ITERATIONS 1
-#define HORIZON 46
+#define SIM_TIME 1500
+#define ITERATIONS_MAX 6000
+#define ITERATIONS 3
+#define HORIZON 35
 
 #define DIM_OF_PARAMETERS 7
 #define DIM_OF_STATES 4
@@ -20,14 +20,14 @@ params.cuh
 #define DIM_OF_INPUT 1
 
 #define NUM_OF_SAMPLES 10000
-#define NUM_OF_ELITES 15
+#define NUM_OF_ELITES 2000
 #define THREAD_PER_BLOCKS 10
 
-const float predictionInterval = 0.8f;
+const float predictionInterval = 0.7f;
 const float interval = 0.01f; // control cycle for plant
-const int NUM_OF_PARABOLOID_COEFFICIENT = 1128;
-const int MAX_DIVISOR = 564;  //Require divisor of "NUM_OF_PARABOLOID_COEFFICIENT" less than 1024 
-const int addTermForLSM = 872;
+const int NUM_OF_PARABOLOID_COEFFICIENT = 666;
+const int MAX_DIVISOR = 111;  //Require divisor of "NUM_OF_PARABOLOID_COEFFICIENT" less than 1024 
+const int addTermForLSM = 1034;
 const float neighborVar = 0.5f;
 const float variance = 2.0f; // variance used for seaching initial solution by MCMPC with Geometric Cooling
 const float Rho = 1e-3; // inverse constant values for Barrier term

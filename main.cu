@@ -77,12 +77,15 @@ int main(int argc, char **argv)
 
     /* ホスト・デバイス双方で使用するベクトルの宣言 */
     // float hostParams[DIM_OF_PARAMETERS], hostState[DIM_OF_STATES], hostConstraint[NUM_OF_CONSTRAINTS], hostWeightMatrix[DIM_OF_WEIGHT_MATRIX];
-    SystemControlVariable hostSCV, deviceSCV;
+    SystemControlVariable *hostSCV, *deviceSCV;
     // float *deviceParams, *deviceState, *deviceConstraint, *deviceWeightMatrix;
     // init_host_vector(hostParams, hostState, hostConstraint, hostWeightMatrix);
-    init_variables( &hostSCV );
-    CHECK( cudaMalloc((void **)&deviceSCV, sizeof(SystemControlVariable)) );
-    CHECK( cudaMemcpy(&deviceSCV, &hostSCV, sizeof(SystemControlVariable), cudaMemcpyHostToDevice) );
+    hostSCV = (SystemControlVariable*)malloc(sizeof(SystemControlVariable));
+    init_variables( hostSCV );
+    // SystemControlVariable *phostSCV = &hostSCV;
+    // SystemControlVariable *pdeviceSCV;
+    CHECK( cudaMalloc(&deviceSCV, sizeof(SystemControlVariable)) );
+    CHECK( cudaMemcpy(deviceSCV, hostSCV, sizeof(SystemControlVariable), cudaMemcpyHostToDevice) );
     // cudaMalloc(&deviceParams, sizeof(float) * DIM_OF_PARAMETERS);
     // cudaMalloc(&deviceState, sizeof(float) * DIM_OF_STATES);
     // cudaMalloc(&deviceConstraint, sizeof(float) * NUM_OF_CONSTRAINTS);
@@ -118,9 +121,12 @@ int main(int argc, char **argv)
     
     /* 入力・コスト・最適性残差等の情報をまとめた構造体の宣言 */
     SampleInfo *deviceSampleInfo, *hostSampleInfo, *deviceEliteSampleInfo;
-    hostSampleInfo = (SampleInfo *)malloc(sizeof(SampleInfo) * NUM_OF_ELITES);
+    hostSampleInfo = (SampleInfo *)malloc(sizeof(SampleInfo) * NUM_OF_SAMPLES);
     cudaMalloc(&deviceSampleInfo, sizeof(SampleInfo) * NUM_OF_SAMPLES);
     cudaMalloc(&deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES);
+
+    Tolerance *hostTol;
+    hostTol = (Tolerance*)malloc(sizeof(Tolerance)*HORIZON+1);
 
     /* ２次超平面フィッティングの結果を反映する行列及びベクトルの宣言　（<---最適値計算にも使用）*/
     float *Hessian, *invHessian, *lowerHessian, *HessianElements;
@@ -165,12 +171,12 @@ int main(int argc, char **argv)
     float *hostData, *deviceData, *hostTempData, *deviceTempData;
     hostData = (float *)malloc(sizeof(float) * HORIZON);
     hostTempData = (float *)malloc(sizeof(float) * HORIZON);
-    cudaMalloc(&deviceData, sizeof(float) * HORIZON);
+    CHECK(cudaMalloc(&deviceData, sizeof(float) * HORIZON));
     cudaMalloc(&deviceTempData, sizeof(float) * HORIZON);
     for(int i = 0; i < HORIZON; i++){
         hostData[i] = 0.0f;
     }
-    cudaMemcpy(deviceData, hostData, sizeof(float) * HORIZON, cudaMemcpyHostToDevice);
+    CHECK( cudaMemcpy(deviceData, hostData, sizeof(float) * HORIZON, cudaMemcpyHostToDevice));
 
     /* 制御ループの開始 */
     float F_input = 0.0f;
@@ -206,11 +212,13 @@ int main(int argc, char **argv)
                 thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
                 thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
 
+                // printf("hoge\n");
+
                 CHECK( cudaMemcpy(hostSampleInfo, deviceSampleInfo, sizeof(SampleInfo) * NUM_OF_SAMPLES, cudaMemcpyDeviceToHost) );
-                weighted_mean(hostData, NUM_OF_SAMPLES, hostSampleInfo);
+                weighted_mean(hostData, NUM_OF_ELITES, hostSampleInfo);
                 MCMPC_F = hostData[0];
                 CHECK( cudaMemcpy(deviceData, hostData, sizeof(float) * HORIZON, cudaMemcpyHostToDevice) );
-                calc_OC_for_Cart_and_SinglePole_hostF(optimumConditions, hostData, hostSCV);
+                calc_OC_for_Cart_and_SinglePole_hostF(optimumConditions, hostData, hostSCV, hostTol);
 
                 printf("cost :: %f   KKT_Error :: %f\n", optimumConditions[0], optimumConditions[1]);
             }
@@ -286,8 +294,8 @@ int main(int argc, char **argv)
                 CHECK( cudaMemcpy(hostTempData, deviceTempData, sizeof(float) * HORIZON, cudaMemcpyDeviceToHost) );
                 Proposed_F = hostTempData[0]; //提案手法による推定入力値のうち最初の時刻のものをコピーする
                 // 提案法の最適性条件を計算->比較(vs MC解)->物理シミュレーション(by RungeKutta4.5)->結果の保存
-                calc_OC_for_Cart_and_SinglePole_hostF(optimumConditions, hostData, hostSCV); //MC解に対する最適性条件を計算
-                calc_OC_for_Cart_and_SinglePole_hostF(optimumCondition_p, hostTempData, hostSCV); //提案手法に対する最適性条件を計算
+                calc_OC_for_Cart_and_SinglePole_hostF(optimumConditions, hostData, hostSCV, hostTol); //MC解に対する最適性条件を計算
+                calc_OC_for_Cart_and_SinglePole_hostF(optimumCondition_p, hostTempData, hostSCV, hostTol); //提案手法に対する最適性条件を計算
                 
             }
             cudaEventRecord(stop,0);
@@ -309,15 +317,16 @@ int main(int argc, char **argv)
             CHECK( cudaMemcpy(deviceData, hostData, sizeof(float) * HORIZON, cudaMemcpyHostToDevice) );
         }
 
-        Runge_Kutta45_for_SecondaryOderSystem( &hostSCV, F_input, interval);
-        CHECK( cudaMemcpy(&deviceSCV, &hostSCV, sizeof(SystemControlVariable), cudaMemcpyHostToDevice) );
+        Runge_Kutta45_for_SecondaryOderSystem( hostSCV, F_input, interval);
+        CHECK( cudaMemcpy(deviceSCV, hostSCV, sizeof(SystemControlVariable), cudaMemcpyHostToDevice) );
 
-        fprintf(fp, "%f %f %f %f %f %f %f %f\n", t * interval, F_input, MCMPC_F, Proposed_F, hostSCV.state[0], hostSCV.state[1], hostSCV.state[2], hostSCV.state[3]);
+        fprintf(fp, "%f %f %f %f %f %f %f %f\n", t * interval, F_input, MCMPC_F, Proposed_F, hostSCV->state[0], hostSCV->state[1], hostSCV->state[2], hostSCV->state[3]);
         fprintf(opco, "%f %f %f %f %f %f %f\n", t * interval, optimumConditions[0], optimumCondition_p[0], optimumConditions[1], optimumCondition_p[1], process_gpu_time/10e3, procedure_all_time/CLOCKS_PER_SEC);
     }
     if(cusolverH) cusolverDnDestroy(cusolverH);
     if(handle_cublas) cublasDestroy(handle_cublas);
     fclose(fp);
+    fclose(opco);
     cudaDeviceReset( );
     printf("%s\n", cudaGetErrorString(cudaGetLastError()));
     return 0;

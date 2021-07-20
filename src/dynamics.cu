@@ -61,16 +61,16 @@ __host__ __device__ float Cart_type_Pendulum_ddtheta(float u, float x,  float th
 	return a[4] / a[8];
 }
 
-__host__ __device__ void get_Lx_Cart_and_SinglePole(float *Lx, Tolerance *prev, SystemControlVariable SCV)
+__host__ __device__ void get_Lx_Cart_and_SinglePole(float *Lx, Tolerance *prev, SystemControlVariable *SCV)
 {
     // float temp_Lx[DIM_OF_STATES] = { };
-    Lx[0] = SCV.weightMatrix[0] * prev->state[0];
-    Lx[1] = SCV.weightMatrix[1] * cosf(prev->state[1] / 2) * sinf(prev->state[1] / 2) * 0.5f;
-    Lx[2] = SCV.weightMatrix[2] * prev->state[2];
-    Lx[3] = SCV.weightMatrix[3] * prev->state[3];
+    Lx[0] = SCV->weightMatrix[0] * prev->state[0];
+    Lx[1] = SCV->weightMatrix[1] * cosf(prev->state[1] / 2) * sinf(prev->state[1] / 2) * 0.5f;
+    Lx[2] = SCV->weightMatrix[2] * prev->state[2];
+    Lx[3] = SCV->weightMatrix[3] * prev->state[3];
 }
 
-__host__ __device__ void get_LFx_Cart_and_SinglePole(float *LFx, Tolerance *current, Tolerance *later, SystemControlVariable SCV, float t_delta)
+__host__ __device__ void get_LFx_Cart_and_SinglePole(float *LFx, Tolerance *current, Tolerance *later, SystemControlVariable *SCV, float t_delta)
 {
     float a[36] = { };
     float /*x,*/ th, dx, dtheta;
@@ -81,19 +81,19 @@ __host__ __device__ void get_LFx_Cart_and_SinglePole(float *LFx, Tolerance *curr
 
     a[0] = - later->lambda[0]; //lambda^T * Fx(:,1) := LFx[0]
 
-    a[1] = -powf(SCV.params[1] * SCV.params[2] * cosf(th), 2) + powf(SCV.params[1] * SCV.params[2], 2)
-            + SCV.params[0] * SCV.params[1] * powf(SCV.params[2], 2) + SCV.params[3] * (SCV.params[0] + SCV.params[1]); // -(Mp*lp*cos(th))^2 + (Mp*lp)^2 + Mc*Mp*lp^2 + Jp * (Mp + Mc)
-    a[2] = (SCV.params[1] * powf(SCV.params[2], 2) + SCV.params[3]) * SCV.params[1] * powf(dtheta, 2) * SCV.params[2] * cosf(th); // (Jp + Mp*lp^2) * Mp * lp * dth^2 * cos(th)
-    a[3] = powf(SCV.params[1] * SCV.params[2] * cosf(th), 2) * SCV.params[6]; //(Mp*lp*cos(th))^2 * g
-    a[4] = (SCV.params[5] * dtheta - SCV.params[1] * SCV.params[6] * SCV.params[2] * sinf(th)); // (mup * dtheta - Mp * lp * g * sin(th) )
-    a[5] = SCV.params[1] * SCV.params[2] * sinf(th); //Mp * lp * sin(th)
+    a[1] = -powf(SCV->params[1] * SCV->params[2] * cosf(th), 2) + powf(SCV->params[1] * SCV->params[2], 2)
+            + SCV->params[0] * SCV->params[1] * powf(SCV->params[2], 2) + SCV->params[3] * (SCV->params[0] + SCV->params[1]); // -(Mp*lp*cos(th))^2 + (Mp*lp)^2 + Mc*Mp*lp^2 + Jp * (Mp + Mc)
+    a[2] = (SCV->params[1] * powf(SCV->params[2], 2) + SCV->params[3]) * SCV->params[1] * powf(dtheta, 2) * SCV->params[2] * cosf(th); // (Jp + Mp*lp^2) * Mp * lp * dth^2 * cos(th)
+    a[3] = powf(SCV->params[1] * SCV->params[2] * cosf(th), 2) * SCV->params[6]; //(Mp*lp*cos(th))^2 * g
+    a[4] = (SCV->params[5] * dtheta - SCV->params[1] * SCV->params[6] * SCV->params[2] * sinf(th)); // (mup * dtheta - Mp * lp * g * sin(th) )
+    a[5] = SCV->params[1] * SCV->params[2] * sinf(th); //Mp * lp * sin(th)
     a[6] = a[4] * a[5]; //Mp * lp * sin(th) *(mup * dtheta - Mp * lp * g * sin(th) )
-    a[7] = 2.0f * powf(SCV.params[1] * SCV.params[2], 3) * powf(cosf(th), 2) * sinf(th); //2 * Mp^3 * lp^3 * cos^2(th) * sin(th)
-    a[8] = 2.0f * powf(SCV.params[1] * SCV.params[2], 2) * cosf(th) * sinf(th); //2 * Mp^2 * lp^2 * cos(th) * sin(th)
-    a[9] = SCV.params[3] + SCV.params[1] * powf(SCV.params[2], 2); // Jp + Mp * lp^2
-    a[10] = SCV.params[1] * SCV.params[2] * powf(dtheta, 2) * sinf(th) + current->Input[0] - SCV.params[4] * dx; // [Mp * lp * dtheta^2 * sinf(th) + U - muc * dx]
-    a[11] = SCV.params[1] * SCV.params[2]; //Mp * lp
-    a[12] = 2.0f * SCV.params[1] * powf( SCV.params[2], 2) * dtheta * sinf(th) + SCV.params[5] * cosf(th) + 2.0f * SCV.params[3] * sinf(th); //2 * Mp * lp^2 *dtheta * sin(th) + mup * cos(th) + 2 * Jp * dtheta * sin(th)
+    a[7] = 2.0f * powf(SCV->params[1] * SCV->params[2], 3) * powf(cosf(th), 2) * sinf(th); //2 * Mp^3 * lp^3 * cos^2(th) * sin(th)
+    a[8] = 2.0f * powf(SCV->params[1] * SCV->params[2], 2) * cosf(th) * sinf(th); //2 * Mp^2 * lp^2 * cos(th) * sin(th)
+    a[9] = SCV->params[3] + SCV->params[1] * powf(SCV->params[2], 2); // Jp + Mp * lp^2
+    a[10] = SCV->params[1] * SCV->params[2] * powf(dtheta, 2) * sinf(th) + current->Input[0] - SCV->params[4] * dx; // [Mp * lp * dtheta^2 * sinf(th) + U - muc * dx]
+    a[11] = SCV->params[1] * SCV->params[2]; //Mp * lp
+    a[12] = 2.0f * SCV->params[1] * powf( SCV->params[2], 2) * dtheta * sinf(th) + SCV->params[5] * cosf(th) + 2.0f * SCV->params[3] * sinf(th); //2 * Mp * lp^2 *dtheta * sin(th) + mup * cos(th) + 2 * Jp * dtheta * sin(th)
     
     a[13] = a[2] / a[1]; //[Fx;32]_1
     a[14] = a[3] / a[1]; //[Fx;32]_2
@@ -103,24 +103,24 @@ __host__ __device__ void get_LFx_Cart_and_SinglePole(float *LFx, Tolerance *curr
     a[18] = (a[8] * a[9] * a[10]) / a[16]; //[Fx;32]_5
     a[19] = (a[13] - a[14] - a[15] - a[17] - a[18]) * t_delta; // Fx;32
     
-    a[20] = -(SCV.params[4] * a[9]) / a[1]; //[Fx;33] = -myuc * (Jp + Mp * lp^2) / a[1]
+    a[20] = -(SCV->params[4] * a[9]) / a[1]; //[Fx;33] = -myuc * (Jp + Mp * lp^2) / a[1]
     a[21] = a[20] * t_delta - 1.0f; // Fx;33
 
-    a[22] = SCV.params[1] * SCV.params[2] * a[12] / a[1]; //[Fx;34] = Mp * lp * (2 * Mp * lp^2 * dtheta * sin(th) + myup * cos(th) + 2 * Jp * dtheta * sinf(th) ) / a[1]
+    a[22] = SCV->params[1] * SCV->params[2] * a[12] / a[1]; //[Fx;34] = Mp * lp * (2 * Mp * lp^2 * dtheta * sin(th) + myup * cos(th) + 2 * Jp * dtheta * sinf(th) ) / a[1]
     a[23] = a[22] * t_delta; //Fx;34
 
     a[24] = (a[5] * a[10]) / a[1]; //[Fx;42]_1
-    a[25] =  powf(SCV.params[1] * SCV.params[2] * cosf(th), 2); // (Mp*lp*cos(th))^2
+    a[25] =  powf(SCV->params[1] * SCV->params[2] * cosf(th), 2); // (Mp*lp*cos(th))^2
     a[26] = a[22] * powf(dtheta, 2) / a[1]; //[Fx;42]_2
-    a[27] = a[11] * SCV.params[6] * cosf(th) * (SCV.params[0] + SCV.params[1]) / a[1]; //[Fx;42]_3
+    a[27] = a[11] * SCV->params[6] * cosf(th) * (SCV->params[0] + SCV->params[1]) / a[1]; //[Fx;42]_3
     a[28] = (a[7] * a[10]) / a[16]; //[Fx;42]_4
-    a[29] = (a[8] * (SCV.params[0] + SCV.params[1]) * a[4]) / a[16]; //[Fx;42]_5
+    a[29] = (a[8] * (SCV->params[0] + SCV->params[1]) * a[4]) / a[16]; //[Fx;42]_5
     a[30] = (a[24] - a[26] + a[27] + a[28] + a[29]) * t_delta; // Fx;42 
 
-    a[31] = SCV.params[5] * SCV.params[1] * SCV.params[2] * cosf(th) / a[1]; //[Fx;43]
+    a[31] = SCV->params[5] * SCV->params[1] * SCV->params[2] * cosf(th) / a[1]; //[Fx;43]
     a[32] = a[31] * t_delta; //Fx;43
 
-    a[33] = -SCV.params[5] * (SCV.params[0] + SCV.params[1]) / a[1]; //[Fx;44]_1
+    a[33] = -SCV->params[5] * (SCV->params[0] + SCV->params[1]) / a[1]; //[Fx;44]_1
     a[34] = -a[8] / a[1]; //[Fx;44]_2
     a[35] = (a[29] + a[30]) * t_delta - 1.0f; //Fx;44
 
@@ -132,7 +132,7 @@ __host__ __device__ void get_LFx_Cart_and_SinglePole(float *LFx, Tolerance *curr
     LFx[3] = (t_delta * later->lambda[1]) + (a[23] * later->lambda[2]) + (a[35] * later->lambda[3]); 
 }
 
-__host__ __device__ void get_dHdu_Cart_and_SinglePole(Tolerance *current, Tolerance *later, SystemControlVariable SCV, float t_delta)
+__host__ __device__ void get_dHdu_Cart_and_SinglePole(Tolerance *current, Tolerance *later, SystemControlVariable *SCV, float t_delta)
 {
     float temp_Lu[DIM_OF_INPUT] = { };
     float temp_LBu[DIM_OF_INPUT] = { };
@@ -140,19 +140,19 @@ __host__ __device__ void get_dHdu_Cart_and_SinglePole(Tolerance *current, Tolera
     float temp_LamFu[DIM_OF_INPUT] = { };
 
     float o[10] = { };
-    temp_Lu[0] = SCV.weightMatrix[4] * current->Input[0];
+    temp_Lu[0] = SCV->weightMatrix[4] * current->Input[0];
     
-    o[0] = powf(current->Input[0], 2) - powf(SCV.constraints[1], 2); // (U^2 - U_max^2)
+    o[0] = powf(current->Input[0], 2) - powf(SCV->constraints[1], 2); // (U^2 - U_max^2)
     o[1] = 2.0f * current->Input[0]; // 2 * U
     o[2] = o[1] / o[0]; //LBu = 2U / (U^2 - U_max^2)
 
-    o[3] = SCV.params[3] + SCV.params[1] * powf(SCV.params[2], 2); //Jp + Mp * lp^2
-    o[4] = -SCV.params[1] * SCV.params[2] * cosf(current->state[1]); // -Mp * lp * cos(th)
+    o[3] = SCV->params[3] + SCV->params[1] * powf(SCV->params[2], 2); //Jp + Mp * lp^2
+    o[4] = -SCV->params[1] * SCV->params[2] * cosf(current->state[1]); // -Mp * lp * cos(th)
     
-    o[5] = -powf(SCV.params[1] * SCV.params[2] * cosf(current->state[1]), 2); //- Mp^2 * lp^2 * cos(th)^2
-    o[6] = powf(SCV.params[1] * SCV.params[2], 2); // Mp^2 * lp^2
-    o[7] = SCV.params[0] * SCV.params[1] * powf(SCV.params[2], 2); // Mc * Mp * lp^2
-    o[8] = SCV.params[3] * (SCV.params[0] + SCV.params[1]); // Jp * (Mp + Mc)
+    o[5] = -powf(SCV->params[1] * SCV->params[2] * cosf(current->state[1]), 2); //- Mp^2 * lp^2 * cos(th)^2
+    o[6] = powf(SCV->params[1] * SCV->params[2], 2); // Mp^2 * lp^2
+    o[7] = SCV->params[0] * SCV->params[1] * powf(SCV->params[2], 2); // Mc * Mp * lp^2
+    o[8] = SCV->params[3] * (SCV->params[0] + SCV->params[1]); // Jp * (Mp + Mc)
     o[9] = o[5] + o[6] + o[7] + o[8];
 
     temp_LBu[0] = o[2];

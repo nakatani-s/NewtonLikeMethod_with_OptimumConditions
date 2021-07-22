@@ -14,11 +14,15 @@
 #include "dynamics.cuh"
 
 
+void NewtonLikeMethodInputSaturation(float *In, float Umax, float Umin);
 /* ------------ global functions are defined below -------------*/
 __global__ void NewtonLikeMethodGetTensorVector(QHP *Out, SampleInfo *In, int *indices);
 __global__ void NewtonLikeMethodGenNormalizationMatrix(float *Mat, QHP *elements, int SAMPLE_SIZE, int Ydimention);
 __global__ void NewtonLikeMethodGenNormalizationVector(float *Vec, QHP *elements, int SAMPLE_SIZE);
 __global__ void NewtonLikeMethodGenNormalEquation(float *Mat, float *Vec, QHP *elements, int SAMPLE_SIZE, int Ydimention);
+
+__global__ void NewtonLikeMethodGetRegularMatrix(float *Mat, QHP *element, int Sample_size);
+__global__ void NewtonLikeMethodGetRegularVector(float *Vec, QHP *element, int Sample_size);
 
 // 最小二乗法の結果からヘシアンだけ取り出すための関数群
 __global__ void NewtonLikeMethodGetHessianElements(float *HessElement, float *ansVec);

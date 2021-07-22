@@ -107,7 +107,8 @@ void calc_OC_for_Cart_and_SinglePole_hostF(float *Ans, float *U, SystemControlVa
                         + Tol[t+1].state[2] * Tol[t+1].state[2] * SCV->weightMatrix[2] + Tol[t+1].state[3] * Tol[t+1].state[3] * SCV->weightMatrix[3];
         }
         
-        costValue = stageCost + Rho * logBarrier;
+        // costValue += stageCost + Rho * logBarrier;
+        costValue += stageCost;
         stageCost = 0.0f;
         logBarrier = 0.0f;
 

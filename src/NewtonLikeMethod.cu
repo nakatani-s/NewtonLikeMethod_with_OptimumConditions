@@ -3,6 +3,22 @@
 */
 #include "../include/NewtonLikeMethod.cuh"
 
+void NewtonLikeMethodInputSaturation(float *In, float Umax, float Umin)
+{
+    for(int i = 0; i < HORIZON; i++)
+    {
+        if(In[i] > Umax)
+        {
+            In[i] = Umax -zeta;
+        }
+        if(In[i] < Umin)
+        {
+            In[i] = Umin + zeta;
+        }
+    }
+}
+
+
 __global__ void NewtonLikeMethodGetTensorVector(QHP *Out, SampleInfo *In, int *indices)
 {
     unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
@@ -82,7 +98,7 @@ __global__ void NewtonLikeMethodGenNormalEquation(float *Mat, float *Vec, QHP *e
     int ix = threadIdx.x + blockIdx.x * blockDim.x;
     int iy = threadIdx.y + blockIdx.y * blockDim.y;
     unsigned int idx = iy * Ydimention + ix;
-    
+    Mat[idx] = 0.0f;
     if(idx < Ydimention)
     {
         for(int index = 0; index < SAMPLE_SIZE; index++)
@@ -96,6 +112,28 @@ __global__ void NewtonLikeMethodGenNormalEquation(float *Mat, float *Vec, QHP *e
             Mat[idx] += elements[index].tensor_vector[ix] * elements[index].tensor_vector[iy];
         }
     }
+}
+
+__global__ void NewtonLikeMethodGetRegularMatrix(float *Mat, QHP *element, int Sample_size)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    Mat[id] = 0.0f;
+    for(int index = 0; index < Sample_size; index++)
+    {
+        Mat[id] += element[index].tensor_vector[threadIdx.x] * element[index].tensor_vector[blockIdx.x];
+    }
+    __syncthreads();
+}
+
+__global__ void NewtonLikeMethodGetRegularVector(float *Vec, QHP *element, int Sample_size)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    Vec[id] = 0.0f;
+    for(int index = 0; index < Sample_size; index++)
+    {
+        Vec[id] += element[index].column_vector[id];
+    }
+    __syncthreads();
 }
 
 

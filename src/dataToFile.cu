@@ -15,7 +15,7 @@ void get_timeParam(int *tparam,int month, int day, int hour, int min, int step)
 void write_Matrix_Information(float *data, dataName *d_name, int *timeparam)
 {
     FILE *fp;
-    char filename_Temp[35];
+    char filename_Temp[45];
     sprintf(filename_Temp,"%s_%d%d_%d%d_%dstep.txt", d_name->name, timeparam[0], timeparam[1], timeparam[2], timeparam[3], timeparam[4]);
     fp = fopen(filename_Temp, "w");
     int nameSize = d_name->dimSize;
@@ -30,4 +30,16 @@ void write_Matrix_Information(float *data, dataName *d_name, int *timeparam)
         }
     }
     fclose(fp);
+}
+
+void resd_InitSolution_Input(float *input, dataName *d_name)
+{
+    FILE *inputFile;
+    inputFile = fopen(d_name->inputfile, "r");
+    int dataSize = d_name->dimSize;
+    for(int i = 0; i < dataSize; i++)
+    {
+        fscanf(inputFile, "%f", &input[i]);
+    }
+    fclose(inputFile);
 }

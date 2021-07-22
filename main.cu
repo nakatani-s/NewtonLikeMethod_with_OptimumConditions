@@ -109,7 +109,8 @@ int main(int argc, char **argv)
     numUnknownParamHessian = numUnknownParamQHP - (HORIZON + 1);
     paramsSizeQuadHyperPlane = numUnknownParamQHP; //ホライズンの大きさに併せて、局所サンプルのサイズを決定
     paramsSizeQuadHyperPlane = paramsSizeQuadHyperPlane + addTermForLSM;
-    dim3 block(MAX_DIVISOR,1);
+    // dim3 block(MAX_DIVISOR,1);
+    dim3 block(1,1);
     dim3 grid((numUnknownParamQHP + block.x - 1)/ block.x, (numUnknownParamQHP + block.y -1) / block.y);
     printf("#NumBlocks = %d\n", numBlocks);
     printf("#NumBlocks = %d\n", numUnknownParamQHP);
@@ -117,7 +118,7 @@ int main(int argc, char **argv)
 #ifdef WRITE_MATRIX_INFORMATION
     float *WriteHessian, *WriteRegular;
     WriteHessian = (float *)malloc(sizeof(float)*dimHessian);
-    WriteRegular = (float *)malloc(sizeof(float)*NUM_OF_PARABOLOID_COEFFICIENT);
+    WriteRegular = (float *)malloc(sizeof(float)* NUM_OF_PARABOLOID_COEFFICIENT * NUM_OF_PARABOLOID_COEFFICIENT);
     int timerParam[5] = { };
     dataName *name;
     name = (dataName*)malloc(sizeof(dataName)*2);
@@ -130,8 +131,9 @@ int main(int argc, char **argv)
     cudaDeviceSynchronize();
     
     /* 入力・コスト・最適性残差等の情報をまとめた構造体の宣言 */
-    SampleInfo *deviceSampleInfo, *hostSampleInfo, *deviceEliteSampleInfo;
+    SampleInfo *deviceSampleInfo, *hostSampleInfo, *hostEliteSampleInfo, *deviceEliteSampleInfo;
     hostSampleInfo = (SampleInfo *)malloc(sizeof(SampleInfo) * NUM_OF_SAMPLES);
+    hostEliteSampleInfo = (SampleInfo*)malloc(sizeof(SampleInfo) * NUM_OF_ELITES);
     cudaMalloc(&deviceSampleInfo, sizeof(SampleInfo) * NUM_OF_SAMPLES);
     cudaMalloc(&deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES);
 
@@ -192,6 +194,7 @@ int main(int argc, char **argv)
     float F_input = 0.0f;
     float MCMPC_F, Proposed_F;
     // float costFromMCMPC, costFromProposed, toleranceFromMCMPC, toleranceFromProposed;
+    float cost_now;
     float optimumConditions[2] = { };
     float optimumCondition_p[2] = { };
     float var;
@@ -217,6 +220,7 @@ int main(int argc, char **argv)
             for(int iter = 0; iter < ITERATIONS_MAX; iter++)
             {
                 var = variance / sqrt(iter + 1);
+                // var = variance / 2;
                 MCMPC_Cart_and_SinglePole<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
                 cudaDeviceSynchronize();
                 thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
@@ -224,9 +228,18 @@ int main(int argc, char **argv)
 
                 // printf("hoge\n");
 
-                CHECK( cudaMemcpy(hostSampleInfo, deviceSampleInfo, sizeof(SampleInfo) * NUM_OF_SAMPLES, cudaMemcpyDeviceToHost) );
-                weighted_mean(hostData, NUM_OF_ELITES, hostSampleInfo);
+                // CHECK( cudaMemcpy(hostSampleInfo, deviceSampleInfo, sizeof(SampleInfo) * NUM_OF_SAMPLES, cudaMemcpyDeviceToHost) );
+                getEliteSampleInfo<<<NUM_OF_ELITES, 1>>>(deviceEliteSampleInfo, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
+                CHECK( cudaMemcpy(hostEliteSampleInfo, deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES, cudaMemcpyDeviceToHost) );
+                // weighted_mean(hostData, NUM_OF_ELITES, hostSampleInfo);
+                weighted_mean(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 MCMPC_F = hostData[0];
+                /*if(iter == ITERATIONS_MAX - 1)
+                {
+                    sprintf(name[2].inputfile, "initSolution.txt");
+                    name[2].dimSize = HORIZON;
+                    resd_InitSolution_Input(hostData, &name[2]);
+                }*/
                 CHECK( cudaMemcpy(deviceData, hostData, sizeof(float) * HORIZON, cudaMemcpyHostToDevice) );
                 calc_OC_for_Cart_and_SinglePole_hostF(optimumConditions, hostData, hostSCV, hostTol);
 
@@ -242,15 +255,24 @@ int main(int argc, char **argv)
             start_t = clock();
             for(int iter = 0; iter < ITERATIONS; iter++)
             {
-                var = neighborVar;
+                var = variance / 2.0f;
                 MCMPC_Cart_and_SinglePole<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
                 cudaDeviceSynchronize();
                 thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
                 thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
 
-                CHECK( cudaMemcpy(hostSampleInfo, deviceSampleInfo, sizeof(SampleInfo) * NUM_OF_SAMPLES, cudaMemcpyDeviceToHost) );
-                weighted_mean(hostData, NUM_OF_SAMPLES, hostSampleInfo);
+                // CHECK( cudaMemcpy(hostSampleInfo, deviceSampleInfo, sizeof(SampleInfo) * NUM_OF_SAMPLES, cudaMemcpyDeviceToHost) );
+                getEliteSampleInfo<<<NUM_OF_ELITES, 1>>>(deviceEliteSampleInfo, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
+                CHECK( cudaMemcpy(hostEliteSampleInfo, deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES, cudaMemcpyDeviceToHost) );
+                weighted_mean(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 MCMPC_F = hostData[0];
+
+                CHECK( cudaMemcpy(deviceData, hostData, sizeof(float) * HORIZON, cudaMemcpyHostToDevice) );
+                var = neighborVar;
+                MCMPC_Cart_and_SinglePole<<<numBlocks, THREAD_PER_BLOCKS>>>( deviceSCV, var, deviceRandomSeed, deviceData, deviceSampleInfo, thrust::raw_pointer_cast( sort_key_device_vec.data() ));
+                cudaDeviceSynchronize();
+                thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
+                thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
 
                 NewtonLikeMethodGetTensorVector<<< qhpBlocks, THREAD_PER_BLOCKS>>>(deviceQHP, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
                 cudaDeviceSynchronize();
@@ -258,7 +280,12 @@ int main(int argc, char **argv)
                 // 1024以下の"NUM_OF_PARABOLOID_COEFFICIENT"の最大約数を(thread数 / block)として計算させる方針で実行
                 // 以下は正規方程式における行列の各要素を取得する関数
                 // NewtonLikeMethodGenNormalizationMatrix<<<grid, block>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
-                NewtonLikeMethodGenNormalEquation<<<grid, block>>>(Gmatrix, CVector, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
+
+                /*-----------------Error detect 2021.07.20----------------------------*/
+                // Following Function has any Error (ThreadId or BlockId) --> it is required to modify original mode.
+                // NewtonLikeMethodGenNormalEquation<<<grid, block>>>(Gmatrix, CVector, deviceQHP, paramsSizeQuadHyperPlane, NUM_OF_PARABOLOID_COEFFICIENT);
+                NewtonLikeMethodGetRegularMatrix<<<NUM_OF_PARABOLOID_COEFFICIENT, NUM_OF_PARABOLOID_COEFFICIENT>>>(Gmatrix, deviceQHP, paramsSizeQuadHyperPlane);
+                NewtonLikeMethodGetRegularVector<<<NUM_OF_PARABOLOID_COEFFICIENT, 1>>>(CVector, deviceQHP, paramsSizeQuadHyperPlane);
                 cudaDeviceSynchronize();
 #ifdef WRITE_MATRIX_INFORMATION
                 if(t<300){
@@ -266,10 +293,17 @@ int main(int argc, char **argv)
                         get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
                         sprintf(name[0].name, "RegularMatrix");
                         name[0].dimSize = NUM_OF_PARABOLOID_COEFFICIENT;
-                        CHECK(cudaMemcpy(WriteRegular, Gmatrix, sizeof(float) * NUM_OF_PARABOLOID_COEFFICIENT, cudaMemcpyDeviceToHost));
+                        CHECK(cudaMemcpy(WriteRegular, Gmatrix, sizeof(float) * NUM_OF_PARABOLOID_COEFFICIENT * NUM_OF_PARABOLOID_COEFFICIENT, cudaMemcpyDeviceToHost));
                         write_Matrix_Information(WriteRegular, &name[0], timerParam);
                     }
                 }else{
+                    if(t % 50 == 0){
+                        get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
+                        sprintf(name[0].name, "RegularMatrix");
+                        name[0].dimSize = NUM_OF_PARABOLOID_COEFFICIENT;
+                        CHECK(cudaMemcpy(WriteRegular, Gmatrix, sizeof(float) * NUM_OF_PARABOLOID_COEFFICIENT, cudaMemcpyDeviceToHost));
+                        write_Matrix_Information(WriteRegular, &name[0], timerParam);
+                    }
 
                 }
 #endif
@@ -315,6 +349,7 @@ int main(int argc, char **argv)
                 CHECK_CUBLAS(cublasSgemv(handle_cublas, CUBLAS_OP_N, HORIZON, HORIZON, &alpha, Hessian, HORIZON, Gradient, 1, &beta, deviceTempData, 1), "Failed to get result by proposed method");
 
                 CHECK( cudaMemcpy(hostTempData, deviceTempData, sizeof(float) * HORIZON, cudaMemcpyDeviceToHost) );
+                NewtonLikeMethodInputSaturation(hostTempData, hostSCV->constraints[1], hostSCV->constraints[0]);
                 Proposed_F = hostTempData[0]; //提案手法による推定入力値のうち最初の時刻のものをコピーする
                 // 提案法の最適性条件を計算->比較(vs MC解)->物理シミュレーション(by RungeKutta4.5)->結果の保存
                 calc_OC_for_Cart_and_SinglePole_hostF(optimumConditions, hostData, hostSCV, hostTol); //MC解に対する最適性条件を計算
@@ -331,20 +366,22 @@ int main(int argc, char **argv)
         printf("MCMPC optimum condition := %f  Proposed optimum condition := %f\n", optimumConditions[1], optimumCondition_p[1]);
         printf("MCMPC cost value := %f  Proposed cost value := %f\n", optimumConditions[0], optimumCondition_p[0]);
         // 評価値比較に基づく投入する入力の決定
-        if(optimumCondition_p[0] < optimumConditions[0])
+        if(optimumCondition_p[0] < optimumConditions[0] /*&& optimumCondition_p[1] < optimumConditions[1]*/)
         {
             F_input = Proposed_F;
+            cost_now = optimumCondition_p[0];
             CHECK( cudaMemcpy(deviceData, hostTempData, sizeof(float) * HORIZON, cudaMemcpyHostToDevice) );
         }else{
             F_input = MCMPC_F;
+            cost_now = optimumConditions[0];
             CHECK( cudaMemcpy(deviceData, hostData, sizeof(float) * HORIZON, cudaMemcpyHostToDevice) );
         }
 
         Runge_Kutta45_for_SecondaryOderSystem( hostSCV, F_input, interval);
         CHECK( cudaMemcpy(deviceSCV, hostSCV, sizeof(SystemControlVariable), cudaMemcpyHostToDevice) );
-
+        
         fprintf(fp, "%f %f %f %f %f %f %f %f\n", t * interval, F_input, MCMPC_F, Proposed_F, hostSCV->state[0], hostSCV->state[1], hostSCV->state[2], hostSCV->state[3]);
-        fprintf(opco, "%f %f %f %f %f %f %f\n", t * interval, optimumConditions[0], optimumCondition_p[0], optimumConditions[1], optimumCondition_p[1], process_gpu_time/10e3, procedure_all_time/CLOCKS_PER_SEC);
+        fprintf(opco, "%f %f %f %f %f %f %f %f\n", t * interval, cost_now, optimumConditions[0], optimumCondition_p[0], optimumConditions[1], optimumCondition_p[1], process_gpu_time/10e3, procedure_all_time/CLOCKS_PER_SEC);
     }
     if(cusolverH) cusolverDnDestroy(cusolverH);
     if(handle_cublas) cublasDestroy(handle_cublas);

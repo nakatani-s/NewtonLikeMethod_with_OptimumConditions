@@ -56,6 +56,18 @@ __global__ void setup_kernel(curandState *state,int seed)
     curand_init(seed, id, 0, &state[id]);
 }
 
+__global__ void getEliteSampleInfo( SampleInfo *Elite, SampleInfo *All, int *indices)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    Elite[id].W = All[indices[id]].W;
+    Elite[id].L = All[indices[id]].L;
+    for(int i = 0; i < HORIZON; i++)
+    {
+        Elite[id].Input[i] = All[indices[id]].Input[i];
+    }
+    __syncthreads();
+}
+
 __device__ float gen_u(unsigned int id, curandState *state, float ave, float vr) {
     float u;
     curandState localState = state[id];

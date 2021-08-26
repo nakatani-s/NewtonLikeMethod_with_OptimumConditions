@@ -28,7 +28,7 @@ void calc_Lx_Terminal_Cart_and_SinglePole(Tolerance *get, SystemControlVariable 
 void calc_Lx_Cart_and_SinglePole(Tolerance *get, SystemControlVariable *SCV)
 {
     get->lambda[0] = get->state[0] * SCV->weightMatrix[0];
-    get->lambda[1] = cosf(get->state[1]/2) * sinf(get->state[1]/2) * SCV->weightMatrix[1];
+    get->lambda[1] = cosf(get->state[1]/2) * sinf(get->state[1]/2) * SCV->weightMatrix[1] / 2.0f;
     get->lambda[2] = get->state[2] * SCV->weightMatrix[2];
     get->lambda[3] = get->state[3] * SCV->weightMatrix[3];
 }
@@ -53,13 +53,15 @@ void calc_BC_Cart_and_SinglePole(Tolerance *Tol, SystemControlVariable *SCV)
         p_index = (HORIZON - t) + 1;
         get_Lx_Cart_and_SinglePole(temp_Lx, &Tol[HORIZON - t], SCV); //この関数の実体は未記述　2021.07.09
         // get_LBx_Cart_and_SinglePole(temp_LBx, &Tol[HORIZON - t], &Tol[p_index], SCV); //この関数の実体は未記述　2021.07.09 振子かつ状態制約無しの場合は不要
-        get_LFx_Cart_and_SinglePole(temp_LFx, &Tol[HORIZON - t], &Tol[p_index], SCV, d_sec); //この関数の実体は未記述　2021.07.09
+        // get_LFx_Cart_and_SinglePole(temp_LFx, &Tol[HORIZON - t], &Tol[p_index], SCV, d_sec); //この関数の実体は未記述　2021.07.09
+        get_LFx_Using_M_Cart_and_SinglePole(temp_LFx, &Tol[HORIZON - t], &Tol[p_index], SCV, d_sec); //add 2021.8.26 write by NAK
         get_dHdu_Cart_and_SinglePole(&Tol[HORIZON-t], &Tol[p_index], SCV, d_sec);
 
         for(int i = 0; i < DIM_OF_STATES; i++)
         {
             temp_Lambda[i] = temp_Lx[i] + Rho * temp_LBx[i] + temp_LFx[i];
-            Tol[HORIZON - t].lambda[i] = Tol[p_index].lambda[i] + temp_Lambda[i] * d_sec; // lam_i = lam_{i+1} + dHdx_i * Dt
+            // Tol[HORIZON - t].lambda[i] = Tol[p_index].lambda[i] + temp_Lambda[i] * d_sec; // lam_i = lam_{i+1} + dHdx_i * Dt
+            Tol[HORIZON - t].lambda[i] = Tol[p_index].lambda[i] + temp_Lambda[i];
         }
     }
 }
@@ -97,9 +99,14 @@ void calc_OC_for_Cart_and_SinglePole_hostF(float *Ans, float *U, SystemControlVa
 
         // printf("log[1] == %f, log[2] = %f\n", log(U[t] + SCV->constraints[1]), log(SCV->constraints[1] - U[t]));
         logBarrier = (SCV->constraints[1]- SCV->constraints[0]) * sRho - log(U[t] + SCV->constraints[1]) - log(SCV->constraints[1] - U[t]);
-        stageCost = Tol[t+1].state[0] * Tol[t+1].state[0] * SCV->weightMatrix[0] + sinf(Tol[t+1].state[1] / 2) * sinf(Tol[t+1].state[1] / 2) * SCV->weightMatrix[1]
+        /*stageCost = Tol[t+1].state[0] * Tol[t+1].state[0] * SCV->weightMatrix[0] + sinf(Tol[t+1].state[1] / 2) * sinf(Tol[t+1].state[1] / 2) * SCV->weightMatrix[1]
                     + Tol[t+1].state[2] * Tol[t+1].state[2] * SCV->weightMatrix[2] + Tol[t+1].state[3] * Tol[t+1].state[3] * SCV->weightMatrix[3]
+                    + U[t] * U[t] * SCV->weightMatrix[4];*/
+        stageCost = Tol[t].state[0] * Tol[t].state[0] * SCV->weightMatrix[0] + sinf(Tol[t+1].state[1] / 2) * sinf(Tol[t+1].state[1] / 2) * SCV->weightMatrix[1]
+                    + Tol[t].state[2] * Tol[t].state[2] * SCV->weightMatrix[2] + Tol[t].state[3] * Tol[t].state[3] * SCV->weightMatrix[3]
                     + U[t] * U[t] * SCV->weightMatrix[4];
+
+        stageCost = 0.5f * stageCost;
         // printf("StageCost := %f, LogBarrier := %f\n", stageCost, logBarrier);
         if(t == HORIZON -1)
         {
@@ -114,11 +121,13 @@ void calc_OC_for_Cart_and_SinglePole_hostF(float *Ans, float *U, SystemControlVa
 
     }
     calc_BC_Cart_and_SinglePole(Tol, SCV);
-    KKT_Error = powf(Tol[0].dHdu[0], 2);
+    // KKT_Error = powf(Tol[0].dHdu[0], 2);
+    KKT_Error = fabs(Tol[0].dHdu[0]);
     float candidate = 0.0f;
     for(int i = 1; i < HORIZON; i++)
     {
-        candidate = powf(Tol[i].dHdu[0], 2);
+        // candidate = powf(Tol[i].dHdu[0], 2);
+        candidate = fabs(Tol[i].dHdu[0]);
         if(KKT_Error < candidate)
         {
             KKT_Error = candidate;

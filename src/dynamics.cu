@@ -93,7 +93,8 @@ __host__ __device__ void get_LFx_Cart_and_SinglePole(float *LFx, Tolerance *curr
     a[9] = SCV->params[3] + SCV->params[1] * powf(SCV->params[2], 2); // Jp + Mp * lp^2
     a[10] = SCV->params[1] * SCV->params[2] * powf(dtheta, 2) * sinf(th) + current->Input[0] - SCV->params[4] * dx; // [Mp * lp * dtheta^2 * sinf(th) + U - muc * dx]
     a[11] = SCV->params[1] * SCV->params[2]; //Mp * lp
-    a[12] = 2.0f * SCV->params[1] * powf( SCV->params[2], 2) * dtheta * sinf(th) + SCV->params[5] * cosf(th) + 2.0f * SCV->params[3] * sinf(th); //2 * Mp * lp^2 *dtheta * sin(th) + mup * cos(th) + 2 * Jp * dtheta * sin(th)
+    // a[12] = 2.0f * SCV->params[1] * powf( SCV->params[2], 2) * dtheta * sinf(th) + SCV->params[5] * cosf(th) + 2.0f * SCV->params[3] * sinf(th); //2 * Mp * lp^2 *dtheta * sin(th) + mup * cos(th) + 2 * Jp * dtheta * sin(th)
+    a[12] = 2.0f * SCV->params[1] * powf( SCV->params[2], 2) * dtheta * sinf(th) + SCV->params[5] * cosf(th) + 2.0f * SCV->params[3] * dtheta * sinf(th); //2 * Mp * lp^2 *dtheta * sin(th) + mup * cos(th) + 2 * Jp * dtheta * sin(th)
     
     a[13] = a[2] / a[1]; //[Fx;32]_1
     a[14] = a[3] / a[1]; //[Fx;32]_2
@@ -111,7 +112,8 @@ __host__ __device__ void get_LFx_Cart_and_SinglePole(float *LFx, Tolerance *curr
 
     a[24] = (a[5] * a[10]) / a[1]; //[Fx;42]_1
     a[25] =  powf(SCV->params[1] * SCV->params[2] * cosf(th), 2); // (Mp*lp*cos(th))^2
-    a[26] = a[22] * powf(dtheta, 2) / a[1]; //[Fx;42]_2
+    // a[26] = a[22] * powf(dtheta, 2) / a[1]; //[Fx;42]_2
+    a[26] = a[25] * powf(dtheta,2) / a[1];
     a[27] = a[11] * SCV->params[6] * cosf(th) * (SCV->params[0] + SCV->params[1]) / a[1]; //[Fx;42]_3
     a[28] = (a[7] * a[10]) / a[16]; //[Fx;42]_4
     a[29] = (a[8] * (SCV->params[0] + SCV->params[1]) * a[4]) / a[16]; //[Fx;42]_5
@@ -121,8 +123,9 @@ __host__ __device__ void get_LFx_Cart_and_SinglePole(float *LFx, Tolerance *curr
     a[32] = a[31] * t_delta; //Fx;43
 
     a[33] = -SCV->params[5] * (SCV->params[0] + SCV->params[1]) / a[1]; //[Fx;44]_1
-    a[34] = -a[8] / a[1]; //[Fx;44]_2
-    a[35] = (a[29] + a[30]) * t_delta - 1.0f; //Fx;44
+    a[34] = -a[8] * dtheta / a[1]; //[Fx;44]_2
+    // a[35] = (a[29] + a[30]) * t_delta - 1.0f; //Fx;44
+    a[35] = (a[33]+a[34]) * t_delta - 1.0f;
 
     // 行列Fxの面倒臭い要素の計算まで”一応終了”<--- 2021.07.12
 
@@ -130,6 +133,72 @@ __host__ __device__ void get_LFx_Cart_and_SinglePole(float *LFx, Tolerance *curr
     LFx[1] = -later->lambda[1] + a[19] * later->lambda[2] + a[30] * later->lambda[3];
     LFx[2] = (t_delta * later->lambda[0]) + (a[21] * later->lambda[2]) + (a[32] * later->lambda[3]);
     LFx[3] = (t_delta * later->lambda[1]) + (a[23] * later->lambda[2]) + (a[35] * later->lambda[3]); 
+}
+
+// 2021.8.25 add 
+__host__ __device__ void get_LFx_Using_M_Cart_and_SinglePole(float *LFx, Tolerance *current, Tolerance *later, SystemControlVariable *SCV, float t_delta)
+{
+    float o[35] = { };
+    float th, dx, dtheta;
+    th = current->state[1];
+    dx = current->state[2];
+    dtheta = current->state[3];
+
+    o[0] = -powf(SCV->params[1]*SCV->params[2]*cosf(th),2); //-Mp^2lp^2cos^2(th)
+    o[1] = powf(SCV->params[1]*SCV->params[2], 2); //Mp^2*lp^2
+    o[2] = SCV->params[0]*SCV->params[1]*powf(SCV->params[2],2); //Mc*Mp*lp^2
+    o[3] = SCV->params[3]*(SCV->params[0]+SCV->params[1]); // Jp*(Mc + Mp)
+
+    o[4] = o[0]+o[1]+o[2]+o[3]; //Denom
+
+    o[5] = SCV->params[3]+SCV->params[1]*powf(SCV->params[2], 2); //(Jp + Mp * lp^2)
+    o[6] = SCV->params[0] + SCV->params[1]; //(Mp + Mc)
+    o[7] = SCV->params[1]*SCV->params[2]*cosf(th); // (Mp * lp * cos(th))
+    o[8] = SCV->params[5]*dtheta-SCV->params[1]*SCV->params[6]*SCV->params[2]*sinf(th); //(mup * dtheta - Mp * g * lp * sin(th) )
+    o[9] = SCV->params[1]*SCV->params[2]*powf(dtheta,2)*sinf(th) + current->Input[0] - SCV->params[4]*dx; //(Mp*lp*dtheta^2 + U - muc*dx)
+    o[10] = SCV->params[1]*SCV->params[2]*sinf(th); //Mp * lp * sin(th)
+    o[11] = o[7] * powf(dtheta,2); //Mp * lp * dtheta^2 * cos(th)
+    o[12] = o[7] * SCV->params[6]; //Mp * g * lp * cos(th)
+    
+    o[13] = o[6]*o[8]*t_delta / o[4]; // A
+    o[14] = o[7]*o[9]*t_delta / o[4]; // B
+    o[15] = o[5]*o[9]*t_delta / o[4]; // C
+    o[16] = o[7]*o[8]*t_delta / o[4]; // D
+    
+    o[17] = o[10] * (o[13]+o[14]); // Mp * lp * sin(th) * [A + B]
+    o[18] = o[10] * (o[15]+o[16]); // Mp * lp * sin(th) * [C + D]
+
+    o[19] = o[5] * (o[17] - o[11]*t_delta) / o[4]; //[F_{x;32}]_1
+    o[20] = o[7] * (o[18] + o[12]*t_delta) / o[4]; //[F_{x;32}]_2
+
+    o[21] = o[19] - o[20]; //F_{x;32}
+
+    o[22] = SCV->params[4]*o[5]*t_delta / o[4];
+    
+    o[23] = o[22] - 1.0f; //F_{x;33}
+
+    o[24] = SCV->params[5]*o[7]*t_delta; //mu_p * Mp * lp * cos(th) * delta_t
+    o[25] = 2.0f*dtheta*o[10]*o[5]*t_delta; //2 * Mp * lp * dth * sin(th) * (Jp + Mp * lp) * t_delta
+
+    o[26] = (o[24] + o[25]) / o[4]; //F_{x;34}
+
+    o[27] = o[6]*(o[17] + o[12]*t_delta); // [F_{x;42}]_1
+    o[28] = o[7]*(o[17] - o[11]*t_delta); // [F_{x;42}]_2
+
+    o[29] = o[27] + o[28]; // F_{x;42}
+
+    o[30] = SCV->params[4]*o[7]*t_delta / o[4]; // F_{x;43}
+    
+    o[31] = SCV->params[5]*o[6]*t_delta; //mu_p * (Mc + Mp) * delta_t
+    o[32] = 2.0f*o[1]*powf(dtheta,2)*cosf(th)*sinf(th)*t_delta; //2 * Mp^2 * lp^2 * dtheta^2 * cos(th) * sin(th) * delta_t
+    o[33] = (o[31] - o[32]) / o[4];
+    
+    o[34] = o[33] - 1.0f; // F_{x;44}
+    
+    LFx[0] = -1.0f * later->lambda[0];
+    LFx[1] = (-1.0f * later->lambda[1]) + (o[21] * later->lambda[2]) + (o[29] * later->lambda[3]);
+    LFx[2] = (t_delta * later->lambda[0]) + (o[23] * later->lambda[2]) + (o[30] * later->lambda[3]);
+    LFx[3] = (t_delta * later->lambda[1]) + (o[26] * later->lambda[2]) + (o[34] * later->lambda[3]);
 }
 
 __host__ __device__ void get_dHdu_Cart_and_SinglePole(Tolerance *current, Tolerance *later, SystemControlVariable *SCV, float t_delta)
@@ -155,7 +224,7 @@ __host__ __device__ void get_dHdu_Cart_and_SinglePole(Tolerance *current, Tolera
     o[8] = SCV->params[3] * (SCV->params[0] + SCV->params[1]); // Jp * (Mp + Mc)
     o[9] = o[5] + o[6] + o[7] + o[8];
 
-    temp_LBu[0] = o[2];
+    temp_LBu[0] = -o[2];
 
     temp_Fu[2] = (o[3] * t_delta) / o[9];
     temp_Fu[3] = (o[4] * t_delta) / o[9];

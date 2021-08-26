@@ -79,22 +79,11 @@ int main(int argc, char **argv)
     /* ホスト・デバイス双方で使用するベクトルの宣言 */
     // float hostParams[DIM_OF_PARAMETERS], hostState[DIM_OF_STATES], hostConstraint[NUM_OF_CONSTRAINTS], hostWeightMatrix[DIM_OF_WEIGHT_MATRIX];
     SystemControlVariable *hostSCV, *deviceSCV;
-    // float *deviceParams, *deviceState, *deviceConstraint, *deviceWeightMatrix;
-    // init_host_vector(hostParams, hostState, hostConstraint, hostWeightMatrix);
     hostSCV = (SystemControlVariable*)malloc(sizeof(SystemControlVariable));
     init_variables( hostSCV );
-    // SystemControlVariable *phostSCV = &hostSCV;
-    // SystemControlVariable *pdeviceSCV;
     CHECK( cudaMalloc(&deviceSCV, sizeof(SystemControlVariable)) );
     CHECK( cudaMemcpy(deviceSCV, hostSCV, sizeof(SystemControlVariable), cudaMemcpyHostToDevice) );
-    // cudaMalloc(&deviceParams, sizeof(float) * DIM_OF_PARAMETERS);
-    // cudaMalloc(&deviceState, sizeof(float) * DIM_OF_STATES);
-    // cudaMalloc(&deviceConstraint, sizeof(float) * NUM_OF_CONSTRAINTS);
-    // cudaMalloc(&deviceWeightMatrix, sizeof(float) * DIM_OF_WEIGHT_MATRIX);
-    // cudaMemcpy(deviceParams, hostParams, sizeof(float) * DIM_OF_PARAMETERS, cudaMemcpyHostToDevice);
-    // cudaMemcpy(deviceState, hostState, sizeof(float) * DIM_OF_STATES, cudaMemcpyHostToDevice);
-    // cudaMemcpy(deviceConstraint, hostConstraint, sizeof(float) * NUM_OF_CONSTRAINTS, cudaMemcpyHostToDevice);
-    // cudaMemcpy(deviceWeightMatrix, hostWeightMatrix, sizeof(float)* DIM_OF_WEIGHT_MATRIX, cudaMemcpyHostToDevice);
+    
 
     /* GPUの設定用パラメータ */
     unsigned int numBlocks, /*randomBlocks,*/ randomNums, /*Blocks,*/ dimHessian, numUnknownParamQHP, numUnknownParamHessian;
@@ -121,7 +110,7 @@ int main(int argc, char **argv)
     WriteRegular = (float *)malloc(sizeof(float)* NUM_OF_PARABOLOID_COEFFICIENT * NUM_OF_PARABOLOID_COEFFICIENT);
     int timerParam[5] = { };
     dataName *name;
-    name = (dataName*)malloc(sizeof(dataName)*2);
+    name = (dataName*)malloc(sizeof(dataName)*3);
 #endif
 
     /* MCMPC用の乱数生成用のseedを生成する */
@@ -136,6 +125,9 @@ int main(int argc, char **argv)
     hostEliteSampleInfo = (SampleInfo*)malloc(sizeof(SampleInfo) * NUM_OF_ELITES);
     cudaMalloc(&deviceSampleInfo, sizeof(SampleInfo) * NUM_OF_SAMPLES);
     cudaMalloc(&deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES);
+    /*SampleInfo *TemporarySampleInfo, *deviceTempSampleInfo;
+    TemporarySampleInfo = (SampleInfo *)malloc(sizeof(SampleInfo) * paramsSizeQuadHyperPlane);
+    CHECK(cudaMalloc(&deviceTempSampleInfo, sizeof(SampleInfo) * paramsSizeQuadHyperPlane) );*/
 
     Tolerance *hostTol;
     hostTol = (Tolerance*)malloc(sizeof(Tolerance)*HORIZON+1);
@@ -226,15 +218,13 @@ int main(int argc, char **argv)
                 thrust::sequence(indices_device_vec.begin(), indices_device_vec.end());
                 thrust::sort_by_key(sort_key_device_vec.begin(), sort_key_device_vec.end(), indices_device_vec.begin());
 
-                // printf("hoge\n");
-
-                // CHECK( cudaMemcpy(hostSampleInfo, deviceSampleInfo, sizeof(SampleInfo) * NUM_OF_SAMPLES, cudaMemcpyDeviceToHost) );
+                
                 getEliteSampleInfo<<<NUM_OF_ELITES, 1>>>(deviceEliteSampleInfo, deviceSampleInfo, thrust::raw_pointer_cast( indices_device_vec.data() ));
                 CHECK( cudaMemcpy(hostEliteSampleInfo, deviceEliteSampleInfo, sizeof(SampleInfo) * NUM_OF_ELITES, cudaMemcpyDeviceToHost) );
                 // weighted_mean(hostData, NUM_OF_ELITES, hostSampleInfo);
                 weighted_mean(hostData, NUM_OF_ELITES, hostEliteSampleInfo);
                 MCMPC_F = hostData[0];
-                /*if(iter == ITERATIONS_MAX - 1)
+                /*if(iter == 0)
                 {
                     sprintf(name[2].inputfile, "initSolution.txt");
                     name[2].dimSize = HORIZON;
@@ -242,9 +232,11 @@ int main(int argc, char **argv)
                 }*/
                 CHECK( cudaMemcpy(deviceData, hostData, sizeof(float) * HORIZON, cudaMemcpyHostToDevice) );
                 calc_OC_for_Cart_and_SinglePole_hostF(optimumConditions, hostData, hostSCV, hostTol);
-
                 printf("cost :: %f   KKT_Error :: %f\n", optimumConditions[0], optimumConditions[1]);
             }
+            name[1].dimSize = HORIZON;
+            sprintf(name[1].name,"InitInputData.txt");
+            write_Vector_Information(hostData, &name[1]);
             stop_t = clock();
             procedure_all_time = stop_t - start_t;
             printf("Geometrical cooling MCMPC computation time :: %f\n", procedure_all_time / CLOCKS_PER_SEC);
@@ -289,7 +281,7 @@ int main(int argc, char **argv)
                 cudaDeviceSynchronize();
 #ifdef WRITE_MATRIX_INFORMATION
                 if(t<300){
-                    if(t % 100 == 0){
+                    if(t % 50 == 0){
                         get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
                         sprintf(name[0].name, "RegularMatrix");
                         name[0].dimSize = NUM_OF_PARABOLOID_COEFFICIENT;
@@ -297,11 +289,11 @@ int main(int argc, char **argv)
                         write_Matrix_Information(WriteRegular, &name[0], timerParam);
                     }
                 }else{
-                    if(t % 50 == 0){
+                    if(t % 250 == 0){
                         get_timeParam(timerParam, timeObject->tm_mon+1, timeObject->tm_mday, timeObject->tm_hour, timeObject->tm_min, t);
                         sprintf(name[0].name, "RegularMatrix");
                         name[0].dimSize = NUM_OF_PARABOLOID_COEFFICIENT;
-                        CHECK(cudaMemcpy(WriteRegular, Gmatrix, sizeof(float) * NUM_OF_PARABOLOID_COEFFICIENT, cudaMemcpyDeviceToHost));
+                        CHECK(cudaMemcpy(WriteRegular, Gmatrix, sizeof(float) * NUM_OF_PARABOLOID_COEFFICIENT * NUM_OF_PARABOLOID_COEFFICIENT, cudaMemcpyDeviceToHost));
                         write_Matrix_Information(WriteRegular, &name[0], timerParam);
                     }
 

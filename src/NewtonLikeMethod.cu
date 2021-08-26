@@ -18,6 +18,24 @@ void NewtonLikeMethodInputSaturation(float *In, float Umax, float Umin)
     }
 }
 
+void NewtonLikeMethodGetIterResult(SampleInfo *RetInfo, float costValue, float *InputSeq)
+{
+    float KL_COST, S, lambda, HM_COST, HM;
+    lambda = mic * HORIZON;
+    HM = costValue / (100 * HORIZON);
+    S = costValue / lambda;
+    KL_COST = exp(-S);
+    HM_COST = exp(-HM);
+
+    RetInfo->W = KL_COST;
+    RetInfo->L = costValue / (100*HORIZON);
+    RetInfo->WHM = HM_COST;
+    // cost_vec[id] = totalCost;
+    for(int index = 0; index < HORIZON; index++){
+        RetInfo->Input[index] = InputSeq[index];
+    }
+}
+
 
 __global__ void NewtonLikeMethodGetTensorVector(QHP *Out, SampleInfo *In, int *indices)
 {
@@ -63,6 +81,52 @@ __global__ void NewtonLikeMethodGetTensorVector(QHP *Out, SampleInfo *In, int *i
     Out[id].column_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = In[indices[id]].L; 
 #endif
     __syncthreads();
+}
+
+__global__ void NewtonLikeMethodGetTensorVectorNoIndex(QHP *Out, SampleInfo *Info)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    int next_indices = 0;
+
+    for(int i = 0; i < HORIZON; i++)
+    {
+        for(int j = i; j < HORIZON; j++)
+        {
+#ifdef USING_WEIGHTED_LEAST_SQUARES
+            Out[id].tensor_vector[next_indices] = Info[id].Input[i] * Info[id].Input[j] * sqrtf( Info[id].WHM );
+
+            Out[id].column_vector[next_indices] = Info[id].L * Info[id].Input[i] * Info[id].Input[j] * Info[id].WHM;
+
+#else
+            Out[id].tensor_vector[next_indices] = Info[id].Input[i] * Info[id].Input[j];
+
+            Out[id].column_vector[next_indices] = Info[id].L * Info[id].Input[i] * Info[id].Input[j];
+
+#endif
+            next_indices += 1;
+        }
+    }
+    for(int i = 0; i < HORIZON; i++)
+    {
+#ifdef USING_WEIGHTED_LEAST_SQUARES
+        Out[id].tensor_vector[next_indices] = Info[id].Input[i] * sqrtf( Info[id].WHM );
+        Out[id].column_vector[next_indices] = Info[id].L * Info[id].Input[i] * Info[id].WHM;
+
+#else
+        Out[id].tensor_vector[next_indices] = Info[id].Input[i];
+        Out[id].column_vector[next_indices] = Info[id].L * Info[id].Input[i];
+#endif
+        next_indices += 1;
+    }
+
+#ifdef USING_WEIGHTED_LEAST_SQUARES
+    Out[id].tensor_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = 1.0f * sqrtf( Info[id].WHM );
+    Out[id].column_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = Info[id].L * Info[id].WHM;
+#else
+    Out[id].tensor_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = 1.0f;
+    Out[id].column_vector[NUM_OF_PARABOLOID_COEFFICIENT - 1] = Info[id].L; 
+#endif
+    __syncthreads( );
 }
 
 

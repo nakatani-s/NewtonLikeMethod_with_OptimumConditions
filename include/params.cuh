@@ -8,10 +8,10 @@ params.cuh
 
 #define InputSaturation
 #define WRITE_MATRIX_INFORMATION
-#define USING_WEIGHTED_LEAST_SQUARES
+// #define USING_WEIGHTED_LEAST_SQUARES
 
 #define SIM_TIME 1000
-#define ITERATIONS_MAX 1000
+#define ITERATIONS_MAX 3
 #define ITERATIONS 4
 #define HORIZON 35
 

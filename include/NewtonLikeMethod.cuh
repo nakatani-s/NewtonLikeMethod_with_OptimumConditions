@@ -15,6 +15,10 @@
 
 
 void NewtonLikeMethodInputSaturation(float *In, float Umax, float Umin);
+void NewtonLikeMethodGetIterResult(SampleInfo *RetInfo, float costValue, float *InputSeq);
+
+__global__ void NewtonLikeMethodGetTensorVectorNoIndex(QHP *Out, SampleInfo *Info);
+
 /* ------------ global functions are defined below -------------*/
 __global__ void NewtonLikeMethodGetTensorVector(QHP *Out, SampleInfo *In, int *indices);
 __global__ void NewtonLikeMethodGenNormalizationMatrix(float *Mat, QHP *elements, int SAMPLE_SIZE, int Ydimention);

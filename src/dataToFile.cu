@@ -32,6 +32,23 @@ void write_Matrix_Information(float *data, dataName *d_name, int *timeparam)
     fclose(fp);
 }
 
+void write_Vector_Information(float *data, dataName *d_name)
+{
+    FILE *fp;
+    fp = fopen(d_name->name, "w");
+    int VecSize = d_name->dimSize;
+    for(int row = 0; row < VecSize; row++)
+    {
+        if(row == VecSize -1){
+            fprintf(fp, "%f\n", data[row]);
+        }else{
+            fprintf(fp,"%f ", data[row]);
+        }
+        // fprintf(fp, "%f\n", data[row]);
+    }
+    fclose(fp);
+}
+
 void resd_InitSolution_Input(float *input, dataName *d_name)
 {
     FILE *inputFile;

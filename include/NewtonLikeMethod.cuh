@@ -39,3 +39,6 @@ __global__ void NewtonLikeMethodGetFullHessianUtoL(float *FullHessian, float *Up
 
 // 最小二乗法の結果から勾配相当のベクトルを取り出すための関数
 __global__ void NewtonLikeMethodGetGradient(float *Gradient, float *elements, int index);
+
+// ベクトルのコピー，あとの処理を円滑に行うために
+__global__ void NewtonLikeMethodCopyVector(float *Out, float *In);

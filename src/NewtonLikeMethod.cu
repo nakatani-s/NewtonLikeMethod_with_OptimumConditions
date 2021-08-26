@@ -286,3 +286,10 @@ __global__ void NewtonLikeMethodGetGradient(float *Gradient, float *elements, in
     Gradient[id] = elements[index + id];
     __syncthreads( );
 }
+
+__global__ void NewtonLikeMethodCopyVector(float *Out, float *In)
+{
+    unsigned int id = threadIdx.x + blockIdx.x * blockDim.x;
+    Out[id] = In[id];
+    __syncthreads( );
+}

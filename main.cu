@@ -199,6 +199,22 @@ int main(int argc, char **argv)
     dim3 grid_inverse(HORIZON, HORIZON);
     dim3 threads((HORIZON + grid_inverse.x -1) / grid_inverse.x, (HORIZON + grid_inverse.y -1) / grid_inverse.y);
 
+#ifdef USING_QR_DECOMPOSITION
+    // float *QR_work_space = NULL;
+    float *ws_QR_operation = NULL;
+    int geqrf_work_size = 0;
+    int ormqr_work_size = 0;
+    int QR_work_size = 0;
+    const int nrhs = 1;
+    float *QR_tau = NULL;
+    cublasSideMode_t side = CUBLAS_SIDE_LEFT;
+    cublasOperation_t trans = CUBLAS_OP_T;
+    cublasOperation_t trans_N = CUBLAS_OP_N;
+    cublasFillMode_t uplo_QR = CUBLAS_FILL_MODE_UPPER;
+    cublasDiagType_t cub_diag = CUBLAS_DIAG_NON_UNIT;
+    CHECK(cudaMalloc((void**)&QR_tau, sizeof(float) * numUnknownParamQHP));
+#endif
+
 
     for(int t = 0; t < SIM_TIME; t++)
     {
@@ -299,6 +315,8 @@ int main(int argc, char **argv)
 
                 }
 #endif
+
+#ifndef USING_QR_DECOMPOSITION
                 //以下は、正規方程式（最小二乗法で使用）のベクトル(正規方程式：Gx = v の v)の各要素を計算する関数
                 // NewtonLikeMethodGenNormalizationVector<<<NUM_OF_PARABOLOID_COEFFICIENT, 1>>>(CVector, deviceQHP, paramsSizeQuadHyperPlane);
                 // cudaDeviceSynchronize();
@@ -314,6 +332,25 @@ int main(int argc, char **argv)
 
                 // 正規方程式をcuBlasで解く
                 CHECK_CUBLAS( cublasSgemv(handle_cublas, CUBLAS_OP_N, m_Rmatrix, m_Rmatrix, &alpha, invGmatrix, m_Rmatrix, CVector, 1, &beta, ansCVector, 1),"Failed to get Estimate Input Sequences");
+#else
+                if(t==1){
+                    CHECK_CUSOLVER( cusolverDnSgeqrf_bufferSize(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, &geqrf_work_size), "Failed to get buffersize for QR decom [1]" );
+                    CHECK_CUSOLVER( cusolverDnSormqr_bufferSize(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, &ormqr_work_size), "Failed to get buffersize for QR decom [2]" );
+                    
+                    QR_work_size = (geqrf_work_size > ormqr_work_size)? geqrf_work_size : ormqr_work_size;
+                }
+                CHECK( cudaMalloc((void**)&ws_QR_operation, sizeof(float) * QR_work_size) );
+                /* compute QR factorization */ 
+                CHECK_CUSOLVER( cusolverDnSgeqrf(cusolverH, m_Rmatrix, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, ws_QR_operation, QR_work_size, devInfo),"Failed to compute QR factorization" );
+
+                CHECK_CUSOLVER( cusolverDnSormqr(cusolverH, side, trans, m_Rmatrix, nrhs, m_Rmatrix, Gmatrix, m_Rmatrix, QR_tau, CVector, m_Rmatrix, ws_QR_operation, QR_work_size, devInfo), "Failed to compute Q^T*B" );
+                CHECK(cudaDeviceSynchronize());
+
+                CHECK_CUBLAS( cublasStrsm(handle_cublas, side, uplo_QR, trans_N, cub_diag, m_Rmatrix, nrhs, &alpha, Gmatrix, m_Rmatrix, CVector, m_Rmatrix), "Failed to compute X = R^-1Q^T*B" );
+                CHECK(cudaDeviceSynchronize());
+
+                NewtonLikeMethodCopyVector<<<numUnknownParamQHP, 1>>>(ansCVector, CVector);
+#endif
 
                 NewtonLikeMethodGetHessianElements<<<numUnknownParamHessian, 1>>>(HessianElements, ansCVector);
                 CHECK(cudaDeviceSynchronize());

@@ -8,6 +8,7 @@ params.cuh
 
 #define InputSaturation
 #define WRITE_MATRIX_INFORMATION
+#define USING_QR_DECOMPOSITION
 // #define USING_WEIGHTED_LEAST_SQUARES
 
 #define SIM_TIME 1000
